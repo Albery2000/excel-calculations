@@ -1,13 +1,54 @@
 import streamlit as st
+import subprocess
+import sys
+
+# Debug: Check if plotly is installed and list all packages
+try:
+    import plotly
+    import plotly.express as px
+    st.success("Plotly and Plotly Express are installed!")
+except ModuleNotFoundError as e:
+    st.error(f"Failed to import package: {e}")
+    st.write(f"Python version: {sys.version}")
+    # Run pip list and capture output
+    try:
+        pip_list_output = subprocess.check_output([sys.executable, "-m", "pip", "list"], text=True)
+        st.write("Installed packages:")
+        st.code(pip_list_output)
+        # Check specifically for plotly
+        if "plotly" not in pip_list_output:
+            st.error("Plotly is not installed in the environment.")
+        else:
+            st.write("Plotly is listed as installed, but import failed. Possible version mismatch or corrupted install.")
+    except subprocess.CalledProcessError as e:
+        st.error(f"Failed to run pip list: {e}")
+    # Do not stop the app here to allow further debugging
+    st.write("Proceeding with the app despite the error (charts may not work).")
+
 import pandas as pd
 import io
-import plotly.express as px
 
+# Rest of your code...
 # ----------------- Page Config -----------------
 st.set_page_config(page_title="📊 Transaction Analyzer", layout="wide")
 
 st.title("📊 Transaction Analyzer")
 st.markdown("Analyze transaction amounts by **Account Code**, with filters, pivot tables, charts, and Excel export.")
+
+# ----------------- Download requirements.txt -----------------
+st.markdown("### 📋 Download Dependencies")
+requirements_content = """streamlit==1.36.0
+pandas==2.2.2
+openpyxl==3.1.5
+plotly==5.22.0
+plotly-express==0.5.0"""
+st.download_button(
+    label="📥 Download requirements.txt",
+    data=requirements_content,
+    file_name="requirements.txt",
+    mime="text/plain"
+)
+st.divider()
 
 # ----------------- File Upload -----------------
 uploaded_file = st.file_uploader("📁 Upload Excel File", type=["xlsx"])
@@ -88,42 +129,34 @@ if uploaded_file:
     monthly_totals['Month_Num'] = monthly_totals['Month'].map(month_map)
     monthly_totals = monthly_totals.sort_values(by='Month_Num')
 
-    bar_fig = px.bar(
-        monthly_totals,
-        x='Month',
-        y='Base Amount',
-        text_auto='.2s',
-        color='Month',
-        title="Monthly Transaction Amounts",
-        labels={'Base Amount': 'Amount'},
-    )
-    st.plotly_chart(bar_fig, use_container_width=True)
+    try:
+        bar_fig = px.bar(
+            monthly_totals,
+            x='Month',
+            y='Base Amount',
+            text_auto='.2s',
+            color='Month',
+            title="Monthly Transaction Amounts",
+            labels={'Base Amount': 'Amount'},
+        )
+        st.plotly_chart(bar_fig, use_container_width=True)
+    except NameError:
+        st.warning("Bar chart cannot be displayed because Plotly is not available.")
 
     # ----------------- Pie Chart -----------------
     st.subheader("📎 Amount Distribution by Account Code")
     code_totals = filtered_df.groupby('Account Code').agg({'Base Amount': 'sum'}).reset_index()
-    pie_fig = px.pie(
-        code_totals,
-        names='Account Code',
-        values='Base Amount',
-        title="Contribution by Account Code",
-        hole=0.4
-    )
-    st.plotly_chart(pie_fig, use_container_width=True)
+    
+    try:
+        pie_fig = px.pie(
+            code_totals,
+            names='Account Code',
+            values='Base Amount',
+            title="Contribution by Account Code",
+            hole=0.4
+        )
+        st.plotly_chart(pie_fig, use_container_width=True)
+    except NameError:
+        st.warning("Pie chart cannot be displayed because Plotly is not available.")
 
-    # ----------------- Excel Export -----------------
-    st.divider()
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        pivot.to_excel(writer, sheet_name=f"Pivot_{selected_year}")
-    output.seek(0)
-
-    st.download_button(
-        label="📥 Download Pivot Table as Excel",
-        data=output,
-        file_name=f"pivot_{selected_year}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-else:
-    st.info("Please upload an Excel file with your transaction data.")
+    # ----------------- Excel
